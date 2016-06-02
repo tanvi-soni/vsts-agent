@@ -78,6 +78,11 @@ namespace Microsoft.VisualStudio.Services.Agent.Util
             return Path.Combine(GetRootPath(), ".Service");
         }
 
+        public static string GetProxyConfigFilePath()
+        {
+            return Path.Combine(GetRootPath(), ".Proxy");
+        }
+
         public static string GetWorkPath(IHostContext hostContext)
         {
             var configurationStore = hostContext.GetService<IConfigurationStore>();

@@ -12,6 +12,7 @@ namespace Microsoft.VisualStudio.Services.Agent.Util
     {
         public static VssConnection CreateConnection(Uri serverUri, VssCredentials credentials)
         {
+            WebProxy.ApplyProxySettings();
             VssClientHttpRequestSettings settings = VssClientHttpRequestSettings.Default.Clone();
             settings.MaxRetryRequest = 5;
 
@@ -63,6 +64,7 @@ namespace Microsoft.VisualStudio.Services.Agent.Util
             ArgUtil.NotNull(serviceEndpoint.Authorization, nameof(serviceEndpoint.Authorization));
             ArgUtil.NotNullOrEmpty(serviceEndpoint.Authorization.Scheme, nameof(serviceEndpoint.Authorization.Scheme));
 
+            WebProxy.ApplyProxySettings();
             if (serviceEndpoint.Authorization.Parameters.Count == 0)
             {
                 throw new ArgumentOutOfRangeException(nameof(serviceEndpoint));
