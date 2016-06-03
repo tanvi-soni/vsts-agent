@@ -1,9 +1,5 @@
 #!/bin/bash
 
-# convert SIGTERM signal to SIGINT
-# for more info on how to propagate SIGTERM to a child process see: http://veithen.github.io/2014/11/16/sigterm-propagation.html
-trap 'kill -INT $PID' TERM INT
-
 if [ -f ".Env" ]; then
     export $(cat .Env)
 fi
@@ -17,8 +13,4 @@ fi
 # insert anything to setup env when running as a service
 
 # run the host process which keep the listener alive
-./externals/node/bin/node ./bin/AgentService.js &
-PID=$!
-wait $PID
-trap - TERM INT
-wait $PID
+./externals/node/bin/node ./bin/AgentService.js

@@ -2,12 +2,10 @@ using Microsoft.TeamFoundation.DistributedTask.WebApi;
 using Microsoft.VisualStudio.Services.Agent.Listener.Configuration;
 using Microsoft.VisualStudio.Services.Agent.Util;
 using System;
-using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using System.IO.Compression;
-using System.Text;
-using System.Diagnostics;
+using System.Reflection;
+using System.Runtime.Loader;
 
 namespace Microsoft.VisualStudio.Services.Agent.Listener
 {
@@ -26,6 +24,7 @@ namespace Microsoft.VisualStudio.Services.Agent.Listener
         private int _poolId;
         private ITerminal _term;
         private bool _inConfigStage;
+        private ManualResetEvent _completedCommand = new ManualResetEvent(false);
 
         public override void Initialize(IHostContext hostContext)
         {
@@ -35,10 +34,16 @@ namespace Microsoft.VisualStudio.Services.Agent.Listener
 
         public async Task<int> ExecuteCommand(CommandSettings command)
         {
+            AssemblyLoadContext loadContext = AssemblyLoadContext.GetLoadContext(typeof(Agent).GetTypeInfo().Assembly);
             try
             {
                 _inConfigStage = true;
+                _completedCommand.Reset();
                 _term.CancelKeyPress += CtrlCHandler;
+
+                //register a SIGTERM handler
+                loadContext.Unloading += Agent_Unloading;
+
                 // TODO Unit test to cover this logic
                 Trace.Info(nameof(ExecuteCommand));
                 var configManager = HostContext.GetService<IConfigurationManager>();
@@ -137,6 +142,17 @@ namespace Microsoft.VisualStudio.Services.Agent.Listener
             finally
             {
                 _term.CancelKeyPress -= CtrlCHandler;
+                loadContext.Unloading -= Agent_Unloading;
+                _completedCommand.Set();
+            }
+        }
+
+        private void Agent_Unloading(AssemblyLoadContext obj)
+        {
+            if ((!_inConfigStage) && (!TokenSource.IsCancellationRequested))
+            {
+                TokenSource.Cancel();
+                _completedCommand.WaitOne(TimeSpan.FromSeconds(30));
             }
         }
 
