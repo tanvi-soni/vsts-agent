@@ -8,7 +8,7 @@ fi
 source ./env.sh
 
 if [[ "$1" == "remove" ]]; then
-    sudo ./bin/Agent.Listener unconfigure
+    sudo ./bin/Agent.Listener unconfigure ${*:2}
 else
     # user_name=`id -nu $user_id`
 
