@@ -367,30 +367,15 @@ namespace Microsoft.VisualStudio.Services.Agent.Listener.Configuration
                     var credentialManager = HostContext.GetService<ICredentialManager>();
 
                     // Get the credentials
-                    VssCredentials creds;
-                    while (true)
-                    {
-                        var credProvider = GetCredentialProvider(command, settings.ServerUrl);
-                        creds = credProvider.GetVssCredentials(HostContext);
-                        Trace.Info("cred retrieved");
-                        try
-                        {
-                            // Validate can connect.
-                            await TestConnectAsync(settings.ServerUrl, creds);
-                            Trace.Info("Connect complete.");
-                            break;
-                        }
-                        catch (Exception e) when (!command.Unattended)
-                        {
-                            _term.WriteError(e);
-                            _term.WriteError(StringUtil.Loc("FailedToConnect"));
-                        }
-                    }
+                    var credProvider = GetCredentialProvider(command, settings.ServerUrl);
+                    VssCredentials creds = credProvider.GetVssCredentials(HostContext);
+                    Trace.Info("cred retrieved");
 
                     Uri uri = new Uri(settings.ServerUrl);
                     VssConnection conn = ApiUtil.CreateConnection(uri, creds);
                     var agentSvr = HostContext.GetService<IAgentServer>();
                     await agentSvr.ConnectAsync(conn);
+                    Trace.Info("Connect complete.");
 
                     List<TaskAgent> agents = await agentSvr.GetAgentsAsync(settings.PoolId, settings.AgentName);
                     if (agents.Count == 0)
