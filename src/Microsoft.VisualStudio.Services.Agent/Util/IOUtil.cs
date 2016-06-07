@@ -76,7 +76,7 @@ namespace Microsoft.VisualStudio.Services.Agent.Util
 
         public static string GetProxyConfigFilePath()
         {
-            return Path.Combine(GetRootPath(), ".Proxy");
+            return Path.Combine(GetRootPath(), ".proxy");
         }
 
         public static string GetWorkPath(IHostContext hostContext)
