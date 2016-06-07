@@ -36,7 +36,7 @@ namespace Microsoft.VisualStudio.Services.Agent.Worker.Build
             AgentSettings settings = HostContext.GetService<IConfigurationStore>().GetSettings();
             if (tf.Features.HasFlag(TfsVCFeatures.Eula) && settings.AcceptTeeEula)
             {
-                // Check if the "tf eula -accept" command needs to be run for the current security user.
+                // Check if the "tf eula -accept" command needs to be run for the current user.
                 bool skipEula = false;
                 try
                 {
@@ -92,25 +92,54 @@ namespace Microsoft.VisualStudio.Services.Agent.Worker.Build
                     name: workspaceName,
                     definitionMappings: definitionMappings,
                     sourcesDirectory: sourcesDirectory);
-
-                // Undo any pending changes.
                 if (existingTFWorkspace != null)
                 {
-                    // Undo pending changes.
-                    ITfsVCStatus tfStatus = await tf.StatusAsync();
-                    if (tfStatus?.HasPendingChanges ?? false)
+                    if (tf.Features.HasFlag(TfsVCFeatures.GetFromUnmappedRoot))
                     {
-                        await tf.UndoAsync();
+                        // Undo pending changes.
+                        ITfsVCStatus tfStatus = await tf.StatusAsync(localPath: sourcesDirectory);
+                        if (tfStatus?.HasPendingChanges ?? false)
+                        {
+                            await tf.UndoAsync(localPath: sourcesDirectory);
 
-                        // Cleanup remaining files/directories from pend adds.
-                        tfStatus.AllAdds
-                            .OrderByDescending(x => x.LocalItem) // Sort descending so nested items are deleted before their parent is deleted.
-                            .ToList()
-                            .ForEach(x =>
+                            // Cleanup remaining files/directories from pend adds.
+                            tfStatus.AllAdds
+                                .OrderByDescending(x => x.LocalItem) // Sort descending so nested items are deleted before their parent is deleted.
+                                .ToList()
+                                .ForEach(x =>
+                                {
+                                    executionContext.Output(StringUtil.Loc("Deleting", x.LocalItem));
+                                    IOUtil.Delete(x.LocalItem, cancellationToken);
+                                });
+                        }
+                    }
+                    else
+                    {
+                        // Perform "undo" for each map.
+                        foreach (DefinitionWorkspaceMapping definitionMapping in definitionMappings ?? new DefinitionWorkspaceMapping[0])
+                        {
+                            if (definitionMapping.MappingType == DefinitionMappingType.Map)
                             {
-                                executionContext.Output(StringUtil.Loc("Deleting", x.LocalItem));
-                                IOUtil.Delete(x.LocalItem, cancellationToken);
-                            });
+                                // Check the status.
+                                string localPath = ResolveMappingLocalPath(definitionMapping, sourcesDirectory);
+                                ITfsVCStatus tfStatus = await tf.StatusAsync(localPath: localPath);
+                                if (tfStatus?.HasPendingChanges ?? false)
+                                {
+                                    // Undo.
+                                    await tf.UndoAsync(localPath: localPath);
+
+                                    // Cleanup remaining files/directories from pend adds.
+                                    tfStatus.AllAdds
+                                        .OrderByDescending(x => x.LocalItem) // Sort descending so nested items are deleted before their parent is deleted.
+                                        .ToList()
+                                        .ForEach(x =>
+                                        {
+                                            executionContext.Output(StringUtil.Loc("Deleting", x.LocalItem));
+                                            IOUtil.Delete(x.LocalItem, cancellationToken);
+                                        });
+                                }
+                            }
+                        }
                     }
 
                     // Scorch.
@@ -151,7 +180,7 @@ namespace Microsoft.VisualStudio.Services.Agent.Worker.Build
                     .OrderBy(x => x.NormalizedServerPath?.Length ?? 0) // By server path length.
                     .ToArray() ?? new DefinitionWorkspaceMapping[0];
 
-                // Add the definition mappings to the TEE workspace.
+                // Add the definition mappings to the workspace.
                 foreach (DefinitionWorkspaceMapping definitionMapping in definitionMappings)
                 {
                     switch (definitionMapping.MappingType)
@@ -172,8 +201,22 @@ namespace Microsoft.VisualStudio.Services.Agent.Worker.Build
                 }
             }
 
-            // Get.
-            await tf.GetAsync();
+            if (tf.Features.HasFlag(TfsVCFeatures.GetFromUnmappedRoot))
+            {
+                // Get.
+                await tf.GetAsync(localPath: sourcesDirectory);
+            }
+            else
+            {
+                // Perform "get" for each map.
+                foreach (DefinitionWorkspaceMapping definitionMapping in definitionMappings ?? new DefinitionWorkspaceMapping[0])
+                {
+                    if (definitionMapping.MappingType == DefinitionMappingType.Map)
+                    {
+                        await tf.GetAsync(localPath: ResolveMappingLocalPath(definitionMapping, sourcesDirectory));
+                    }
+                }
+            }
 
             string shelvesetName = executionContext.Variables.Build_SourceTfvcShelveset;
             if (!string.IsNullOrEmpty(shelvesetName))

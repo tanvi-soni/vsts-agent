@@ -21,6 +21,7 @@ namespace Microsoft.VisualStudio.Services.Agent.Worker.Build
             get
             {
                 return TfsVCFeatures.DefaultWorkfoldMap |
+                    TfsVCFeatures.GetFromUnmappedRoot |
                     TfsVCFeatures.LoginType |
                     TfsVCFeatures.Scorch;
             }
@@ -44,9 +45,10 @@ namespace Microsoft.VisualStudio.Services.Agent.Worker.Build
             throw new NotSupportedException();
         }
 
-        public async Task GetAsync()
+        public async Task GetAsync(string localPath)
         {
-            await RunCommandAsync(FormatFlags.OmitCollectionUrl, "vc", "get", $"/version:{SourceVersion}", "/recursive", "/overwrite", SourcesDirectory);
+            ArgUtil.NotNullOrEmpty(localPath, nameof(localPath));
+            await RunCommandAsync(FormatFlags.OmitCollectionUrl, "vc", "get", $"/version:{SourceVersion}", "/recursive", "/overwrite", localPath);
         }
 
         public string ResolvePath(string serverPath)
@@ -85,8 +87,16 @@ namespace Microsoft.VisualStudio.Services.Agent.Worker.Build
             }
         }
 
-        public async Task<ITfsVCStatus> StatusAsync()
+        public async Task<ITfsVCStatus> StatusAsync(string localPath)
         {
+            // It is expected that the caller only invokes this method against the sources root
+            // directory. The "status" subcommand cannot correctly resolve the workspace from the
+            // an unmapped root folder. For example, if a workspace contains only two mappings,
+            // $/foo -> $(build.sourcesDirectory)\foo and $/bar -> $(build.sourcesDirectory)\bar,
+            // then "tf status $(build.sourcesDirectory) /r" will not be able to resolve the workspace.
+            // Therefore, the "localPath" parameter is not passed to the "status" subcommand - the
+            // collection URL and workspace name are used instead.
+            ArgUtil.Equal(SourcesDirectory, localPath, nameof(localPath));
             string xml = await RunPorcelainCommandAsync("vc", "status", $"/workspace:{WorkspaceName}", "/recursive", "/nodetect", "/format:xml");
             var serializer = new XmlSerializer(typeof(TFStatus));
             using (var reader = new StringReader(xml ?? string.Empty))
@@ -115,9 +125,10 @@ namespace Microsoft.VisualStudio.Services.Agent.Worker.Build
             }
         }
 
-        public async Task UndoAsync()
+        public async Task UndoAsync(string localPath)
         {
-            await RunCommandAsync(FormatFlags.OmitCollectionUrl, "vc", "undo", "/recursive", SourcesDirectory);
+            ArgUtil.NotNullOrEmpty(localPath, nameof(localPath));
+            await RunCommandAsync(FormatFlags.OmitCollectionUrl, "vc", "undo", "/recursive", localPath);
         }
 
         public async Task UnshelveAsync(string shelveset)
@@ -147,7 +158,7 @@ namespace Microsoft.VisualStudio.Services.Agent.Worker.Build
 
         public async Task WorkspaceNewAsync()
         {
-            await RunCommandAsync("vc", "workspace", "/new", "/location:local", "/permission:Public", WorkspaceName);
+            await RunCommandAsync("vc", "workspace", "/new", "/location:server", "/permission:Public", WorkspaceName);
         }
 
         public async Task<ITfsVCWorkspace[]> WorkspacesAsync()

@@ -8,6 +8,9 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Security.Cryptography;
+using System.IO;
+using System.Text;
 
 namespace Microsoft.VisualStudio.Services.Agent.Listener
 {
@@ -25,6 +28,10 @@ namespace Microsoft.VisualStudio.Services.Agent.Listener
         private long? _lastMessageId;
         private AgentSettings _settings;
         private ITerminal _term;
+        private readonly TimeSpan _sessionCreationRetryInterval = TimeSpan.FromSeconds(30);
+        private readonly TimeSpan _sessionConflictRetryLimit = TimeSpan.FromMinutes(4);
+        private readonly Dictionary<string, int> _sessionCreationExceptionTracker = new Dictionary<string, int>();
+        private readonly TimeSpan _getNextMessageRetryInterval = TimeSpan.FromSeconds(15);
 
         public TaskAgentSession Session { get; set; }
 
@@ -38,7 +45,6 @@ namespace Microsoft.VisualStudio.Services.Agent.Listener
         public async Task<Boolean> CreateSessionAsync(CancellationToken token)
         {
             Trace.Entering();
-            int attempt = 0;
 
             // Settings
             var configManager = HostContext.GetService<IConfigurationManager>();
@@ -64,20 +70,19 @@ namespace Microsoft.VisualStudio.Services.Agent.Listener
                 Id = _settings.AgentId,
                 Name = _settings.AgentName,
                 Version = Constants.Agent.Version,
-                Enabled = true
             };
             string sessionName = $"{Environment.MachineName ?? "AGENT"}";
             var taskAgentSession = new TaskAgentSession(sessionName, agent, systemCapabilities);
 
             var agentSvr = HostContext.GetService<IAgentServer>();
             string errorMessage = string.Empty;
-            bool firstAttempt = true; //tells us if this is the first time we try to connect
+            bool encounteringError = false;
             // TODO: LOC
             _term.WriteLine("Connecting to the server.");
             while (true)
             {
-                attempt++;
-                Trace.Info($"Create session attempt {attempt}.");
+                token.ThrowIfCancellationRequested();
+                Trace.Info($"Attempt to create session.");
                 try
                 {
                     Trace.Info("Connecting to the Agent Server...");
@@ -87,55 +92,42 @@ namespace Microsoft.VisualStudio.Services.Agent.Listener
                                                         _settings.PoolId,
                                                         taskAgentSession,
                                                         token);
-                    if (!firstAttempt)
+
+                    Trace.Info($"Session created.");
+                    if (encounteringError)
                     {
                         _term.WriteLine(StringUtil.Loc("QueueConnected", DateTime.UtcNow));
+                        _sessionCreationExceptionTracker.Clear();
+                        encounteringError = false;
                     }
 
                     return true;
                 }
-                catch (OperationCanceledException ex)
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
                 {
-                    if (token.IsCancellationRequested) //Distinguish timeout from user cancellation
-                    {
-                        Trace.Info("Cancelled");
-                        throw;
-                    }
-                    errorMessage = ex.Message;
+                    Trace.Info("Session creation has been cancelled.");
+                    throw;
                 }
                 catch (Exception ex)
                 {
-                    Trace.Error("Failed to create session.");
-                    if (ex is TaskAgentNotFoundException)
-                    {
-                        Trace.Error("The agent no longer exists on the server. Stopping the agent.");
-                        _term.WriteError(StringUtil.Loc("MissingAgent"));
-                    }
-
-                    if (ex is TaskAgentSessionConflictException)
-                    {
-                        Trace.Error("The session for this agent already exists.");
-                        _term.WriteError(StringUtil.Loc("SessionExist"));
-                    }
-
+                    Trace.Error("Catch exception during create session.");
                     Trace.Error(ex);
-                    if (IsFatalException(ex))
+
+                    if (!IsSessionCreationExceptionRetriable(ex))
                     {
                         _term.WriteError(StringUtil.Loc("SessionCreateFailed", ex.Message));
                         return false;
                     }
 
-                    errorMessage = ex.Message;
-                }
+                    if (!encounteringError) //print the message only on the first error
+                    {
+                        _term.WriteError(StringUtil.Loc("QueueConError", DateTime.UtcNow, ex.Message, _sessionCreationRetryInterval.TotalSeconds));
+                        encounteringError = true;
+                    }
 
-                TimeSpan interval = TimeSpan.FromSeconds(30);
-                if (firstAttempt) //print the message only on the first error
-                {
-                    _term.WriteError(StringUtil.Loc("QueueConError", DateTime.UtcNow, errorMessage, interval.TotalSeconds));
-                    firstAttempt = false;
+                    Trace.Info("Sleeping for {0} seconds before retrying.", _sessionCreationRetryInterval.TotalSeconds);
+                    await HostContext.Delay(_sessionCreationRetryInterval, token);
                 }
-                Trace.Info("Sleeping for {0} seconds before retrying.", interval.TotalSeconds);
-                await HostContext.Delay(interval, token);
             }
         }
 
@@ -157,7 +149,7 @@ namespace Microsoft.VisualStudio.Services.Agent.Listener
             ArgUtil.NotNull(Session, nameof(Session));
             ArgUtil.NotNull(_settings, nameof(_settings));
             var agentServer = HostContext.GetService<IAgentServer>();
-            int consecutiveErrors = 0; //number of consecutive exceptions thrown by GetAgentMessageAsync
+            bool encounteringError = false;
             string errorMessage = string.Empty;
             while (true)
             {
@@ -165,75 +157,56 @@ namespace Microsoft.VisualStudio.Services.Agent.Listener
                 TaskAgentMessage message = null;
                 try
                 {
-                    consecutiveErrors++;
                     message = await agentServer.GetAgentMessageAsync(_settings.PoolId,
                                                                 Session.SessionId,
                                                                 _lastMessageId,
                                                                 token);
+
+                    // Decrypt the message body if the session is using encryption
+                    message = DecryptMessage(message);
+
                     if (message != null)
                     {
                         _lastMessageId = message.MessageId;
                     }
 
-                    if (consecutiveErrors > 1) //print the message once only if there was an error
+                    if (encounteringError) //print the message once only if there was an error
                     {
                         _term.WriteLine(StringUtil.Loc("QueueConnected", DateTime.UtcNow));
+                        encounteringError = false;
                     }
-
-                    consecutiveErrors = 0;
                 }
-                catch (TimeoutException ex)
+                catch (OperationCanceledException) when (token.IsCancellationRequested)
                 {
-                    Trace.Verbose($"{nameof(TimeoutException)} received.");
-                    //retry after a delay
-                    errorMessage = ex.Message;
-                }
-                catch (TaskAgentSessionExpiredException)
-                {
-                    Trace.Verbose($"{nameof(TaskAgentSessionExpiredException)} received.");
-                    if (!await CreateSessionAsync(token))
-                    {
-                        throw;
-                    }
-
-                    consecutiveErrors = 0;
-                }
-                catch (OperationCanceledException ex)
-                {
-                    Trace.Verbose($"{nameof(OperationCanceledException)} received.");
-                    //we get here when the agent is stopped with CTRL-C or service is stopped or HttpClient has timed out                     
-                    if (token.IsCancellationRequested) //Distinguish timeout from user cancellation
-                    {
-                        throw;
-                    }
-
-                    //retry after a delay
-                    errorMessage = ex.Message;
+                    Trace.Info("Get next message has been cancelled.");
+                    throw;
                 }
                 catch (Exception ex)
                 {
+                    Trace.Error("Catch exception during get next message.");
                     Trace.Error(ex);
-                    if (IsFatalException(ex))
+
+                    if (ex is TaskAgentSessionExpiredException && await CreateSessionAsync(token))
+                    {
+                        Trace.Info($"{nameof(TaskAgentSessionExpiredException)} received, recoverd by recreate session.");
+                    }
+                    else if (!IsGetNextMessageExceptionRetriable(ex))
                     {
                         throw;
                     }
-
-                    //retry after a delay
-                    errorMessage = ex.Message;
-                }
-
-                //print an error and add a delay
-                if (consecutiveErrors > 0)
-                {
-                    TimeSpan interval = TimeSpan.FromSeconds(15);
-                    if (consecutiveErrors == 1)
+                    else
                     {
-                        //print error only on the first consecutive error
-                        _term.WriteError(StringUtil.Loc("QueueConError", DateTime.UtcNow, errorMessage, interval.TotalSeconds));
-                    }
+                        //retry after a delay
+                        if (!encounteringError)
+                        {
+                            //print error only on the first consecutive error
+                            _term.WriteError(StringUtil.Loc("QueueConError", DateTime.UtcNow, ex.Message, _getNextMessageRetryInterval.TotalSeconds));
+                            encounteringError = true;
+                        }
 
-                    Trace.Info("Sleeping for {0} seconds before retrying.", interval.TotalSeconds);
-                    await HostContext.Delay(interval, token);
+                        Trace.Info("Sleeping for {0} seconds before retrying.", _getNextMessageRetryInterval.TotalSeconds);
+                        await HostContext.Delay(_getNextMessageRetryInterval, token);
+                    }
                 }
 
                 if (message == null)
@@ -247,12 +220,108 @@ namespace Microsoft.VisualStudio.Services.Agent.Listener
             }
         }
 
-        private bool IsFatalException(Exception ex)
+        private TaskAgentMessage DecryptMessage(TaskAgentMessage message)
         {
-            return ex is TaskAgentPoolNotFoundException ||
-                   ex is AccessDeniedException ||
-                   ex is TaskAgentNotFoundException ||
-                   ex is VssUnauthorizedException;
+            if (Session.EncryptionKey == null ||
+                Session.EncryptionKey.Value.Length == 0 ||
+                message == null ||
+                message.IV == null ||
+                message.IV.Length == 0)
+            {
+                return message;
+            }
+
+            using (var aes = Aes.Create())
+            using (var decryptor = GetMessageDecryptor(aes, message))
+            using (var body = new MemoryStream(Convert.FromBase64String(message.Body)))
+            using (var cryptoStream = new CryptoStream(body, decryptor, CryptoStreamMode.Read))
+            using (var bodyReader = new StreamReader(cryptoStream, Encoding.UTF8))
+            {
+                message.Body = bodyReader.ReadToEnd();
+            }
+
+            return message;
+        }
+
+        private ICryptoTransform GetMessageDecryptor(
+            Aes aes,
+            TaskAgentMessage message)
+        {
+            if (Session.EncryptionKey.Encrypted)
+            {
+                // The agent session encryption key uses the AES symmetric algorithm
+                var keyManager = HostContext.GetService<IRSAKeyManager>();
+                using (var rsa = keyManager.GetKey())
+                {
+                    return aes.CreateDecryptor(rsa.Decrypt(Session.EncryptionKey.Value, RSAEncryptionPadding.OaepSHA1), message.IV);
+                }
+            }
+            else
+            {
+                return aes.CreateDecryptor(Session.EncryptionKey.Value, message.IV);
+            }
+        }
+
+        private bool IsGetNextMessageExceptionRetriable(Exception ex)
+        {
+            if (ex is TaskAgentNotFoundException ||
+                ex is TaskAgentPoolNotFoundException ||
+                ex is TaskAgentSessionExpiredException ||
+                ex is AccessDeniedException ||
+                ex is VssUnauthorizedException)
+            {
+                Trace.Info($"Non-retriable exception: {ex.Message}");
+                return false;
+            }
+            else
+            {
+                Trace.Info($"Retriable exception: {ex.Message}");
+                return true;
+            }
+        }
+
+        private bool IsSessionCreationExceptionRetriable(Exception ex)
+        {
+            if (ex is TaskAgentNotFoundException)
+            {
+                Trace.Info("The agent no longer exists on the server. Stopping the agent.");
+                _term.WriteError(StringUtil.Loc("MissingAgent"));
+                return false;
+            }
+            else if (ex is TaskAgentSessionConflictException)
+            {
+                Trace.Info("The session for this agent already exists.");
+                _term.WriteError(StringUtil.Loc("SessionExist"));
+                if (_sessionCreationExceptionTracker.ContainsKey(nameof(TaskAgentSessionConflictException)))
+                {
+                    _sessionCreationExceptionTracker[nameof(TaskAgentSessionConflictException)]++;
+                    if (_sessionCreationExceptionTracker[nameof(TaskAgentSessionConflictException)] * _sessionCreationRetryInterval.TotalSeconds >= _sessionConflictRetryLimit.TotalSeconds)
+                    {
+                        Trace.Info("The session conflict exception have reached retry limit.");
+                        _term.WriteError(StringUtil.Loc("SessionExistStopRetry", _sessionConflictRetryLimit.TotalSeconds));
+                        return false;
+                    }
+                }
+                else
+                {
+                    _sessionCreationExceptionTracker[nameof(TaskAgentSessionConflictException)] = 1;
+                }
+
+                Trace.Info("The session conflict exception haven't reached retry limit.");
+                return true;
+            }
+            else if (ex is TaskAgentPoolNotFoundException ||
+                     ex is AccessDeniedException ||
+                     ex is VssUnauthorizedException)
+            {
+                Trace.Info($"Non-retriable exception: {ex.Message}");
+                return false;
+            }
+            else
+            {
+                Trace.Info($"Retriable exception: {ex.Message}");
+                return true;
+            }
         }
     }
 }

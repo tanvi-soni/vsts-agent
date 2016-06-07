@@ -9,6 +9,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Security.Cryptography;
 
 namespace Microsoft.VisualStudio.Services.Agent.Listener.Configuration
 {
@@ -139,9 +140,13 @@ namespace Microsoft.VisualStudio.Services.Agent.Listener.Configuration
                 }
             }
 
-            _term.WriteLine(StringUtil.Loc("SavingCredential"));
-            Trace.Verbose("Saving credential");
-            _store.SaveCredential(credProvider.CredentialData);
+            // We want to use the native CSP of the platform for storage, so we use the RSACSP directly
+            RSAParameters publicKey;
+            var keyManager = HostContext.GetService<IRSAKeyManager>();
+            using (var rsa = keyManager.CreateKey())
+            {
+                publicKey = rsa.ExportParameters(false);
+            }
 
             // Loop getting agent name and pool
             string poolName = null;
@@ -187,6 +192,11 @@ namespace Microsoft.VisualStudio.Services.Agent.Listener.Configuration
                 {
                     if (command.GetReplace())
                     {
+                        agent.Authorization = new TaskAgentAuthorization
+                        {
+                            PublicKey = new TaskAgentPublicKey(publicKey.Exponent, publicKey.Modulus),
+                        };
+
                         // update - update instead of delete so we don't lose user capabilities etc...
                         agent.Version = Constants.Agent.Version;
 
@@ -216,6 +226,10 @@ namespace Microsoft.VisualStudio.Services.Agent.Listener.Configuration
                 {
                     agent = new TaskAgent(agentName)
                     {
+                        Authorization = new TaskAgentAuthorization
+                        {
+                            PublicKey = new TaskAgentPublicKey(publicKey.Exponent, publicKey.Modulus),
+                        },
                         MaxParallelism = 1,
                         Version = Constants.Agent.Version
                     };
@@ -239,18 +253,44 @@ namespace Microsoft.VisualStudio.Services.Agent.Listener.Configuration
                 }
             }
 
+            // See if the server supports our OAuth key exchange for credentials
+            if (agent.Authorization != null &&
+                agent.Authorization.ClientId != Guid.Empty &&
+                agent.Authorization.AuthorizationUrl != null)
+            {
+                var credentialData = new CredentialData
+                {
+                    Scheme = Constants.Configuration.OAuth,
+                    Data =
+                    {
+                        { "clientId", agent.Authorization.ClientId.ToString("D") },
+                        { "authorizationUrl", agent.Authorization.AuthorizationUrl.AbsoluteUri },
+                    },
+                };
+
+                // Save the negotiated OAuth credential data
+                _store.SaveCredential(credentialData);
+            }
+            else
+            {
+                // Save the provided admin credential data for compat with existing agent
+                _store.SaveCredential(credProvider.CredentialData);
+            }
+
             // We will Combine() what's stored with root.  Defaults to string a relative path
             string workFolder = command.GetWork();
+            string notificationPipeName = command.GetNotificationPipeName();
 
             // Get Agent settings
             var settings = new AgentSettings
             {
                 AcceptTeeEula = acceptTeeEula,
                 AgentId = agent.Id,
-                ServerUrl = serverUrl,
                 AgentName = agentName,
-                PoolName = poolName,
+                NotificationPipeName = notificationPipeName,
                 PoolId = poolId,
+                PoolName = poolName,
+                ServerUrl = serverUrl,
                 WorkFolder = workFolder,
             };
 
@@ -325,11 +365,17 @@ namespace Microsoft.VisualStudio.Services.Agent.Listener.Configuration
                 {
                     AgentSettings settings = _store.GetSettings();
                     var credentialManager = HostContext.GetService<ICredentialManager>();
-                    VssCredentials creds = credentialManager.LoadCredentials();
+
+                    // Get the credentials
+                    var credProvider = GetCredentialProvider(command, settings.ServerUrl);
+                    VssCredentials creds = credProvider.GetVssCredentials(HostContext);
+                    Trace.Info("cred retrieved");
+
                     Uri uri = new Uri(settings.ServerUrl);
                     VssConnection conn = ApiUtil.CreateConnection(uri, creds);
                     var agentSvr = HostContext.GetService<IAgentServer>();
                     await agentSvr.ConnectAsync(conn);
+                    Trace.Info("Connect complete.");
 
                     List<TaskAgent> agents = await agentSvr.GetAgentsAsync(settings.PoolId, settings.AgentName);
                     if (agents.Count == 0)
@@ -385,29 +431,18 @@ namespace Microsoft.VisualStudio.Services.Agent.Listener.Configuration
             Trace.Info(nameof(GetCredentialProvider));
 
             var credentialManager = HostContext.GetService<ICredentialManager>();
-            ICredentialProvider provider = null;
-            if (_store.HasCredentials())
-            {
-                CredentialData data = _store.GetCredentials();
-                provider = credentialManager.GetCredentialProvider(data.Scheme);
-                provider.CredentialData = data;
-            }
-            else
-            {
-                // Get the auth type. On premise defaults to negotiate (Kerberos with fallback to NTLM).
-                // Hosted defaults to PAT authentication.
-                bool isHosted = serverUrl.IndexOf("visualstudio.com", StringComparison.OrdinalIgnoreCase) != -1
-                    || serverUrl.IndexOf("tfsallin.net", StringComparison.OrdinalIgnoreCase) != -1;
-                string defaultAuth = isHosted ? Constants.Configuration.PAT :
-                    (Constants.Agent.Platform == Constants.OSPlatform.Windows ? Constants.Configuration.Integrated : Constants.Configuration.Negotiate);
-                string authType = command.GetAuth(defaultValue: defaultAuth);
+            // Get the auth type. On premise defaults to negotiate (Kerberos with fallback to NTLM).
+            // Hosted defaults to PAT authentication.
+            bool isHosted = serverUrl.IndexOf("visualstudio.com", StringComparison.OrdinalIgnoreCase) != -1
+                || serverUrl.IndexOf("tfsallin.net", StringComparison.OrdinalIgnoreCase) != -1;
+            string defaultAuth = isHosted ? Constants.Configuration.PAT :
+                (Constants.Agent.Platform == Constants.OSPlatform.Windows ? Constants.Configuration.Integrated : Constants.Configuration.Negotiate);
+            string authType = command.GetAuth(defaultValue: defaultAuth);
 
-                // Create the credential.
-                Trace.Info("Creating credential for auth: {0}", authType);
-                provider = credentialManager.GetCredentialProvider(authType);
-                provider.EnsureCredential(HostContext, command, serverUrl);
-            }
-
+            // Create the credential.
+            Trace.Info("Creating credential for auth: {0}", authType);
+            var provider = credentialManager.GetCredentialProvider(authType);
+            provider.EnsureCredential(HostContext, command, serverUrl);
             return provider;
         }
 
