@@ -8,6 +8,8 @@ namespace Microsoft.VisualStudio.Services.Agent
 {
     public class WebProxy : IWebProxy
     {
+        private static bool _proxySettingsApplied = false;
+
         public WebProxy(Uri proxyAddress)
         {
             if (proxyAddress == null)
@@ -27,9 +29,7 @@ namespace Microsoft.VisualStudio.Services.Agent
         public bool IsBypassed(Uri uri)
         { 
             return false;
-        }
-
-        private static bool _proxySettingsApplied = false;
+        }        
 
         public static void ApplyProxySettings()
         {
