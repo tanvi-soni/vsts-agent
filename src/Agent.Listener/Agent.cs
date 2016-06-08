@@ -4,8 +4,6 @@ using Microsoft.VisualStudio.Services.Agent.Util;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Reflection;
-using System.Runtime.Loader;
 
 namespace Microsoft.VisualStudio.Services.Agent.Listener
 {
@@ -33,8 +31,7 @@ namespace Microsoft.VisualStudio.Services.Agent.Listener
         }
 
         public async Task<int> ExecuteCommand(CommandSettings command)
-        {
-            AssemblyLoadContext loadContext = AssemblyLoadContext.GetLoadContext(typeof(Agent).GetTypeInfo().Assembly);
+        {            
             try
             {
                 _inConfigStage = true;
@@ -42,7 +39,7 @@ namespace Microsoft.VisualStudio.Services.Agent.Listener
                 _term.CancelKeyPress += CtrlCHandler;
 
                 //register a SIGTERM handler
-                loadContext.Unloading += Agent_Unloading;
+                HostContext.Unloading += Agent_Unloading;
 
                 // TODO Unit test to cover this logic
                 Trace.Info(nameof(ExecuteCommand));
@@ -142,17 +139,17 @@ namespace Microsoft.VisualStudio.Services.Agent.Listener
             finally
             {
                 _term.CancelKeyPress -= CtrlCHandler;
-                loadContext.Unloading -= Agent_Unloading;
+                HostContext.Unloading -= Agent_Unloading;
                 _completedCommand.Set();
             }
         }
 
-        private void Agent_Unloading(AssemblyLoadContext obj)
+        private void Agent_Unloading(object sender, EventArgs e)
         {
             if ((!_inConfigStage) && (!TokenSource.IsCancellationRequested))
             {
                 TokenSource.Cancel();
-                _completedCommand.WaitOne(TimeSpan.FromSeconds(30));
+                _completedCommand.WaitOne(Constants.Agent.ExitOnUnloadTimeout);
             }
         }
 
