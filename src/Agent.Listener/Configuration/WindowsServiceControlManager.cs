@@ -45,11 +45,12 @@ namespace Microsoft.VisualStudio.Services.Agent.Listener.Configuration
             }
 
             Trace.Info("LogonAccount after transforming: {0}, user: {1}, domain: {2}", _logonAccount, _userName, _domainName);
-            if (!defaultServiceAccount.Equals(new NTAccount(_logonAccount)))
+            if (!defaultServiceAccount.Equals(new NTAccount(_logonAccount)) &&
+                !NativeWindowsServiceHelper.IsWellKnownIdentity(_logonAccount))
             {
                 while (true)
                 {
-                    logonPassword = command.GetWindowsLogonPassword();
+                    logonPassword = command.GetWindowsLogonPassword(_logonAccount);
 
                     // TODO: Fix this for unattended (should throw if not valid).
                     // TODO: If account is locked there is no point in retrying, translate error to useful message

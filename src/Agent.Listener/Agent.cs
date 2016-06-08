@@ -34,6 +34,7 @@ namespace Microsoft.VisualStudio.Services.Agent.Listener
         {            
             try
             {
+                WebProxy.ApplyProxySettings();
                 _inConfigStage = true;
                 _completedCommand.Reset();
                 _term.CancelKeyPress += CtrlCHandler;
@@ -187,6 +188,8 @@ namespace Microsoft.VisualStudio.Services.Agent.Listener
             IJobDispatcher jobDispatcher = null;
             try
             {
+                var notification = HostContext.GetService<IJobNotification>();
+                notification.StartClient(settings.NotificationPipeName, token);
                 bool disableAutoUpdate = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("agent.disableupdate"));
                 bool autoUpdateInProgress = false;
                 Task<bool> selfUpdateTask = null;

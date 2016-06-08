@@ -33,6 +33,7 @@ namespace Microsoft.VisualStudio.Services.Agent
                 {
                     public static readonly string Agent = "agent";
                     public static readonly string Auth = "auth";
+                    public static readonly string NotificationPipeName = "notificationpipename";
                     public static readonly string Pool = "pool";
                     public static readonly string Url = "url";
                     public static readonly string UserName = "username";
@@ -55,7 +56,7 @@ namespace Microsoft.VisualStudio.Services.Agent
                 {
                     public static readonly string Configure = "configure";
                     public static readonly string Run = "run";
-                    public static readonly string Unconfigure = "unconfigure";
+                    public static readonly string Unconfigure = "remove";
                 }
 
                 public static class Flags
