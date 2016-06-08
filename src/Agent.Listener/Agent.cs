@@ -31,7 +31,7 @@ namespace Microsoft.VisualStudio.Services.Agent.Listener
         }
 
         public async Task<int> ExecuteCommand(CommandSettings command)
-        {            
+        {
             try
             {
                 WebProxy.ApplyProxySettings();
@@ -70,7 +70,7 @@ namespace Microsoft.VisualStudio.Services.Agent.Listener
 
                 // Unconfigure, remove config files, service and exit
                 if (command.Unconfigure)
-                {                    
+                {
                     try
                     {
                         await configManager.UnconfigureAsync(command);
