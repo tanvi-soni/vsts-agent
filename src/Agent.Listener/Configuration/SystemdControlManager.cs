@@ -56,28 +56,28 @@ namespace Microsoft.VisualStudio.Services.Agent.Listener.Configuration
         {
             Trace.Entering();
 
-            throw new NotImplementedException("Systemd Configure Service");
+            throw new NotSupportedException("Systemd Configure Service");
         }
 
         public override void UnconfigureService()
         {
             Trace.Entering();
 
-            throw new NotImplementedException("Systemd Unconfigure Service");
+            throw new NotSupportedException("Systemd Unconfigure Service");
         }
 
         public override void StartService()
         {
             Trace.Entering();
 
-            throw new NotImplementedException("Systemd Start Service");
+            throw new NotSupportedException("Systemd Start Service");
         }
 
         public override void StopService()
         {
             Trace.Entering();
 
-            throw new NotImplementedException("Systemd Stop Service");
+            throw new NotSupportedException("Systemd Stop Service");
         }
 
         public override bool CheckServiceExists(string serviceName)

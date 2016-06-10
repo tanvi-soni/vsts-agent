@@ -57,28 +57,28 @@ namespace Microsoft.VisualStudio.Services.Agent.Listener.Configuration
         {
             Trace.Entering();
 
-            throw new NotImplementedException("OSX Configure Service");
+            throw new NotSupportedException("OSX Configure Service");
         }
 
         public override void UnconfigureService()
         {
             Trace.Entering();
 
-            throw new NotImplementedException("OSX unconfigure service");
+            throw new NotSupportedException("OSX unconfigure service");
         }
 
         public override void StartService()
         {
             Trace.Entering();
 
-            throw new NotImplementedException("OSX start service");
+            throw new NotSupportedException("OSX start service");
         }
 
         public override void StopService()
         {
             Trace.Entering();
 
-            throw new NotImplementedException("OSX stop service");
+            throw new NotSupportedException("OSX stop service");
         }
 
         public override bool CheckServiceExists(string serviceName)
