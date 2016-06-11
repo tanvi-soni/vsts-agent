@@ -15,21 +15,21 @@ What's missing from the preview? Windows tf.exe support is finishing up.
 
 |   | Build & Test | Preview | Release |
 |---|:-----:|:-----:|:-----:|
-|![Apple](docs/res/apple_med.png) **OSX**|![Build & Test](https://mseng.visualstudio.com/_apis/public/build/definitions/b924d696-3eae-4116-8443-9a18392d8544/3080/badge?branch=master)| [Preview 6 v2.101.1](https://github.com/Microsoft/vsts-agent/releases/tag/v2.101.1) | June |
-|![Ubuntu](docs/res/ubuntu_med.png) **Ubuntu**|![Build & Test](https://mseng.visualstudio.com/_apis/public/build/definitions/b924d696-3eae-4116-8443-9a18392d8544/2853/badge?branch=master)| [Preview 6 v2.101.1](https://github.com/Microsoft/vsts-agent/releases/tag/v2.101.1) | June |
-|![RedHat](docs/res/redhat_med.png) **RedHat**|![Build & Test](https://mseng.visualstudio.com/_apis/public/build/definitions/b924d696-3eae-4116-8443-9a18392d8544/3418/badge?branch=master)| [Preview 6 v2.101.1](https://github.com/Microsoft/vsts-agent/releases/tag/v2.101.1) | June |
-|![Win](docs/res/win_med.png) **Windows**|![Build & Test](https://mseng.visualstudio.com/_apis/public/build/definitions/b924d696-3eae-4116-8443-9a18392d8544/2850/badge?branch=master)| [Preview 3 v2.101.1](https://github.com/Microsoft/vsts-agent/releases/tag/v2.101.1) | |
+|![Apple](docs/res/apple_med.png) **OSX**|![Build & Test](https://mseng.visualstudio.com/_apis/public/build/definitions/b924d696-3eae-4116-8443-9a18392d8544/3080/badge?branch=master)| [RC v2.102.0](https://github.com/Microsoft/vsts-agent/releases/tag/v2.102.0) | Next Drop |
+|![Ubuntu](docs/res/ubuntu_med.png) **Ubuntu**|![Build & Test](https://mseng.visualstudio.com/_apis/public/build/definitions/b924d696-3eae-4116-8443-9a18392d8544/2853/badge?branch=master)| [RC v2.102.0](https://github.com/Microsoft/vsts-agent/releases/tag/v2.102.0) | Next Drop |
+|![RedHat](docs/res/redhat_med.png) **RedHat**|![Build & Test](https://mseng.visualstudio.com/_apis/public/build/definitions/b924d696-3eae-4116-8443-9a18392d8544/3418/badge?branch=master)| [RC v2.102.0](https://github.com/Microsoft/vsts-agent/releases/tag/v2.102.0) | Next Drop |
+|![Win](docs/res/win_med.png) **Windows**|![Build & Test](https://mseng.visualstudio.com/_apis/public/build/definitions/b924d696-3eae-4116-8443-9a18392d8544/2850/badge?branch=master)| [Preview 4 v2.102.0](https://github.com/Microsoft/vsts-agent/releases/tag/v2.102.0) | July |
 
 ## Preview Support
 
-This is the current state of what works with the preview.  
+The preview is feature complete on all platforms and supported for production use.  
 
 This agent can be used for the VSTS service and it replaces the node agent for TFS2015 On-Prem.
 
 | Scenario | OSX/Unix | Windows | Comment |
 |:-------------:|:-----:|:-----:|:-----:|
 | VSTS Git      |  Yes  | Yes   |
-| VSTS TfsVC    |  Yes  | Soon  |
+| VSTS TfsVC    |  Yes  | Yes  |
 | TFS2015 Git   |  Yes  | No    | Win use agent with 2015 |
 | TFS2015 TfsVC |  Yes  | No    | Win use agent with 2015 |
 

@@ -29,8 +29,6 @@ Download the agent from [github releases](https://github.com/Microsoft/vsts-agen
 
 ## Step 5: Optionally run the agent interactively
 
-If you didn't run as a service above:
-
 ```bash
 ~/myagent$ ./run.sh
 ```
