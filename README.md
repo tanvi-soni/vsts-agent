@@ -22,8 +22,6 @@ The current preview is more feature complete than the node agent bringing Auto U
 
 ## Preview Support
 
-The preview is feature complete on all platforms and supported for production use.  
-
 This agent can be used for the VSTS service and it replaces the node agent for TFS2015 On-Prem.
 
 | Scenario | OSX/Unix | Windows | Comment |
