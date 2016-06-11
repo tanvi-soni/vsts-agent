@@ -4,6 +4,10 @@ The agent sends logs to the server but some failures such as configuration, netw
 
 Often these logs are most relevant to the product but they can sometimes provide hints to a user as what could be wrong.
 
+## System.Debug
+
+If you are having issues with a build, the first step is to set System.Debug to true on the build definitions variables tab.  The agent and tasks will emit [debug]xxx lines for more detailed insight into what the specific task is doing.
+
 ## Agent Trace Logs
 
 Logs are in the _diag folder.
