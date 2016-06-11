@@ -20,7 +20,7 @@ $ ls -la _diag/
 -rwxr--r--   1 bryanmac  staff  220012 Jun 11 08:39 Worker_20160611-123858-utc.log
 ```
 
-If the agent isn't picking up builds, the agent logs are likely the most relevant.  If a build starts running and you want to get details.
+If the agent isn't picking up builds, the agent logs are likely the most relevant.  If a build starts running and you want to get details of that build, the specific worker log is relevant.
 
 Secrets are masked out of the logs.
 
