@@ -47,6 +47,10 @@ This agent can be used for the VSTS service and it replaces the node agent for T
 
 ![redhat](docs/res/redhat_sm.png)  [Start RedHat](docs/start/startredhat.md)  
 
+## Troubleshooting
+
+Troubleshooting tips are [located here](docs/troubleshooting.md)
+
 ## Contribute
 
 For developers that want to contribute, [read here](docs/contribute.md) on how to build and test.
