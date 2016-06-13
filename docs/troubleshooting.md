@@ -28,9 +28,22 @@ If the agent isn't picking up builds, the agent logs are likely the most relevan
 
 Secrets are masked out of the logs.
 
-## Http Windows
+## Http Tracing Windows
 
-Use Fiddler.  TODO: confirm whether .proxy is needed on windows.
+Start [Fiddler](http://www.telerik.com/fiddler).  
+It's recommended to only listen to agent traffic.  File, Capture Traffic off (F12) 
+
+Let the agent know to use the proxy:
+
+```bash
+set VSTS_HTTP_PROXY=https://127.0.0.1:8888
+```
+
+Run the agent interactively.  If you're running as a service, you can set as the environment variable in control panel for the account the service is running as.
+
+Restart the agent.
+
+TODO: video
 
 ## Http Tracing OSX / Linux
 
@@ -43,10 +56,12 @@ Charles: Proxy > Proxy Settings > SSL Tab.  Enable.  Add URL
 Charles: Proxy > Mac OSX Proxy.  Recommend disabling to only see agent traffic.
 
 ```bash
-echo "http://localhost:8888" > .proxy
+export VSTS_HTTP_PROXY=https://127.0.0.1:8888
 ```
 
-Run the agent interactively.  Restart if it's running.
+Run the agent interactively.  If it's running as a service, you can set in the .env file.  See [nix service](start/nixsvc.md)
+
+Restart the agent.
 
 ## Security Notice
 
