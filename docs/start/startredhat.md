@@ -25,12 +25,16 @@ Download the agent from [github releases](https://github.com/Microsoft/vsts-agen
 
 [Config On-Prem Details](configonprem.md)
 
-> NOTE: running as a service [details here](nixsvc.md)
+## Step 5: Run the agent
 
-## Step 5: Optionally run the agent interactively
+You can run the agent interactively or as a SystemD service.
+
+### Interactively
 
 ```bash
 ~/myagent$ ./run.sh
 ```
 
-**That's It!**  
+### As a SystemD Service
+
+[details here](svcsystemd.md)
