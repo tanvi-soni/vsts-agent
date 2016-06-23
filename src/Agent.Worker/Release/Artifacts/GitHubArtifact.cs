@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
 
 using Microsoft.TeamFoundation.Build.WebApi;
@@ -65,22 +64,21 @@ namespace Microsoft.VisualStudio.Services.Agent.Worker.Release.Artifacts
                 JsonConvert.DeserializeObject<Dictionary<string, string>>(agentArtifactDefinition.Details);
 
             string connectionName;
-            var repositoryName = string.Empty;
-            var branch = string.Empty;
+            string repositoryName = string.Empty;
+            string branch = string.Empty;
 
-            var allFieldsPresents = artifactDetails.TryGetValue(ArtifactDefinitionConstants.ConnectionName, out connectionName)
-                                    && artifactDetails.TryGetValue(ArtifactDefinitionConstants.RepositoryId, out repositoryName)
-                                    && artifactDetails.TryGetValue(ArtifactDefinitionConstants.BranchId, out branch);
-            if (allFieldsPresents)
+            if (artifactDetails.TryGetValue(ArtifactDefinitionConstants.ConnectionName, out connectionName)
+                && artifactDetails.TryGetValue(ArtifactDefinitionConstants.RepositoryId, out repositoryName)
+                && artifactDetails.TryGetValue(ArtifactDefinitionConstants.BranchId, out branch))
             {
-                var gitHubEndpoint = context.Endpoints.FirstOrDefault((e => string.Equals(e.Name, connectionName, StringComparison.OrdinalIgnoreCase)));
+                ServiceEndpoint gitHubEndpoint = context.Endpoints.FirstOrDefault((e => string.Equals(e.Name, connectionName, StringComparison.OrdinalIgnoreCase)));
                 if (gitHubEndpoint == null)
                 {
                     throw new InvalidOperationException(StringUtil.Loc("RMGitHubEndpointNotFound", agentArtifactDefinition.Name));
                 }
 
-                var accessToken = gitHubEndpoint.Authorization.Parameters[EndpointAuthorizationParameters.AccessToken];
-                var repository = HostContext.GetService<IGitHubClient>().GetUserRepo(accessToken, repositoryName);
+                string accessToken = gitHubEndpoint.Authorization.Parameters[EndpointAuthorizationParameters.AccessToken];
+                GitHubRepository repository = HostContext.GetService<IGitHubHttpClient>().GetUserRepo(accessToken, repositoryName);
 
                 Trace.Info($"Found github repository url {repository.Clone_url}");
                 return new GitHubArtifactDetails
